@@ -20,21 +20,27 @@ import com.intellij.ui.awt.RelativePoint
 import kotlin.math.max
 
 class HorizontalGitToolWindowFactory : ToolWindowFactory, DumbAware {
+    // Defaults; users can change via the UI button
+    private var maxCommitsToShow: Int = 500
+    private var maxBranchesToShow: Int = 20
     override fun createToolWindowContent(project: Project, toolWindow: ToolWindow) {
         val panel = JPanel(BorderLayout())
 
-        // Top bar with status (left) and zoom controls (right)
+        // Top bar with status (left) and controls (right)
         val statusLabel = JLabel("")
         val topBar = JPanel(BorderLayout())
         topBar.add(statusLabel, BorderLayout.WEST)
-        val zoomPanel = JPanel(FlowLayout(FlowLayout.RIGHT, 6, 2))
+        val rightPanel = JPanel(FlowLayout(FlowLayout.RIGHT, 6, 2))
+        val limitsBtn = JButton("Limits…")
+        limitsBtn.toolTipText = "Choose how many latest commits and branches to show"
         val zoomOutBtn = JButton("-")
         val zoomInBtn = JButton("+")
         zoomOutBtn.toolTipText = "Zoom out"
         zoomInBtn.toolTipText = "Zoom in"
-        zoomPanel.add(zoomOutBtn)
-        zoomPanel.add(zoomInBtn)
-        topBar.add(zoomPanel, BorderLayout.EAST)
+        rightPanel.add(limitsBtn)
+        rightPanel.add(zoomOutBtn)
+        rightPanel.add(zoomInBtn)
+        topBar.add(rightPanel, BorderLayout.EAST)
         panel.add(topBar, BorderLayout.NORTH)
 
         val commitsPanel = JPanel(BorderLayout())
@@ -50,6 +56,56 @@ class HorizontalGitToolWindowFactory : ToolWindowFactory, DumbAware {
         }
         zoomOutBtn.addActionListener {
             graphProvider()?.zoomOut()
+        }
+        // Limits button popup
+        limitsBtn.addActionListener { e ->
+            val form = JPanel(GridBagLayout())
+            val gbc = GridBagConstraints()
+            gbc.insets = Insets(4, 4, 4, 4)
+            gbc.gridx = 0
+            gbc.gridy = 0
+            gbc.anchor = GridBagConstraints.WEST
+            form.add(JLabel("Latest commits:"), gbc)
+            val commitSpinner = JSpinner(SpinnerNumberModel(maxCommitsToShow, 1, 2_000_000, 1))
+            gbc.gridx = 1
+            form.add(commitSpinner, gbc)
+            gbc.gridx = 0
+            gbc.gridy = 1
+            form.add(JLabel("Latest branches:"), gbc)
+            val branchSpinner = JSpinner(SpinnerNumberModel(maxBranchesToShow, 1, 5_000, 1))
+            gbc.gridx = 1
+            form.add(branchSpinner, gbc)
+            val buttons = JPanel(FlowLayout(FlowLayout.RIGHT, 8, 0))
+            val ok = JButton("OK")
+            val cancel = JButton("Cancel")
+            buttons.add(ok)
+            buttons.add(cancel)
+            gbc.gridx = 0
+            gbc.gridy = 2
+            gbc.gridwidth = 2
+            gbc.anchor = GridBagConstraints.EAST
+            form.add(buttons, gbc)
+
+            val popup = JBPopupFactory.getInstance()
+                .createComponentPopupBuilder(form, form)
+                .setRequestFocus(true)
+                .setResizable(true)
+                .setMovable(true)
+                .setCancelOnClickOutside(true)
+                .createPopup()
+
+            ok.addActionListener {
+                maxCommitsToShow = (commitSpinner.value as Number).toInt()
+                maxBranchesToShow = (branchSpinner.value as Number).toInt()
+                popup.closeOk(null)
+                SwingUtilities.invokeLater {
+                    loadGitData(project, commitsPanel, statusLabel)
+                }
+            }
+            cancel.addActionListener { popup.cancel() }
+
+            val where = RelativePoint(limitsBtn, Point(0, limitsBtn.height))
+            popup.show(where)
         }
 
         SwingUtilities.invokeLater {
@@ -71,33 +127,34 @@ class HorizontalGitToolWindowFactory : ToolWindowFactory, DumbAware {
                 .findGitDir(java.io.File(basePath))
                 .build()
             repo.use { repository ->
-                val git = Git(repository)
                 val revWalk = RevWalk(repository)
                 revWalk.use {
-                    // Build a topologically-sorted walk over all reachable commits from all refs
-                    val startPoints = LinkedHashSet<ObjectId>()
+                    // Choose latest N local branches by tip commit time
+                    val headRefs = repository.refDatabase.getRefsByPrefix("refs/heads/")
+                    val sortedHeads = headRefs.mapNotNull { r ->
+                        val oid = r.objectId ?: r.peeledObjectId
+                        if (oid != null) {
+                            try {
+                                val rc = it.parseCommit(oid)
+                                Pair(r, rc.commitTime)
+                            } catch (_: Exception) {
+                                Pair(r, Int.MIN_VALUE)
+                            }
+                        } else null
+                    }.sortedByDescending { p -> p.second }
+                        .map { p -> p.first }
+                        .take(maxBranchesToShow)
 
-                    // Local branches
-                    for (r in repository.refDatabase.getRefsByPrefix("refs/heads/")) {
+                    val startPoints = LinkedHashSet<ObjectId>()
+                    for (r in sortedHeads) {
                         val oid = r.objectId ?: r.peeledObjectId
-                        if (oid != null) startPoints.add(oid)
-                    }
-                    // Remote-tracking branches
-                    for (r in repository.refDatabase.getRefsByPrefix("refs/remotes/")) {
-                        val oid = r.objectId ?: r.peeledObjectId
-                        if (oid != null) startPoints.add(oid)
-                    }
-                    // Tags too (users often have useful divergent history reachable only from tags)
-                    for (r in repository.refDatabase.getRefsByPrefix("refs/tags/")) {
-                        val peeled = repository.refDatabase.peel(r)
-                        val oid = peeled.peeledObjectId ?: r.objectId
                         if (oid != null) startPoints.add(oid)
                     }
                     if (startPoints.isEmpty()) {
-                        repository.resolve("HEAD")?.let { startPoints.add(it) }
+                        repository.resolve("HEAD")?.let { sp -> startPoints.add(sp) }
                     }
 
-                    // Configure RevWalk with topo ordering to preserve branch structure
+                    // Configure RevWalk with topo ordering and time desc
                     it.reset()
                     it.sort(org.eclipse.jgit.revwalk.RevSort.TOPO)
                     it.sort(org.eclipse.jgit.revwalk.RevSort.COMMIT_TIME_DESC)
@@ -107,13 +164,14 @@ class HorizontalGitToolWindowFactory : ToolWindowFactory, DumbAware {
                     }
                     val log = mutableListOf<RevCommit>()
                     var c: RevCommit? = it.next()
-                    while (c != null) {
+                    while (c != null && log.size < maxCommitsToShow) {
                         log.add(c)
                         c = it.next()
                     }
 
-                    val refsByCommit = collectRefs(repository)
-                    statusLabel.text = "Showing ${log.size} commits"
+                    val allowedBranchNames = sortedHeads.map { r -> r.name.removePrefix("refs/heads/") }.toSet()
+                    val refsByCommit = collectRefs(repository, allowedBranchNames)
+                    statusLabel.text = "Showing ${log.size} commits • ${allowedBranchNames.size} branches"
                     val graph = GraphPanel(log.asReversed(), refsByCommit)
 
                     commitsPanel.removeAll()
@@ -144,7 +202,7 @@ class HorizontalGitToolWindowFactory : ToolWindowFactory, DumbAware {
         }
     }
 
-    private fun collectRefs(repository: org.eclipse.jgit.lib.Repository): Map<String, List<String>> {
+    private fun collectRefs(repository: org.eclipse.jgit.lib.Repository, allowedLocalBranches: Set<String>): Map<String, List<String>> {
         val result = mutableMapOf<String, MutableList<String>>()
         val allRefs = repository.refDatabase.getRefs()
         fun addRef(oid: ObjectId?, name: String) {
@@ -155,19 +213,22 @@ class HorizontalGitToolWindowFactory : ToolWindowFactory, DumbAware {
         for (ref in allRefs) {
             val peeled = repository.refDatabase.peel(ref)
             val objId = peeled.peeledObjectId ?: ref.objectId
-            val shortName = when {
-                ref.name.startsWith("refs/heads/") -> ref.name.removePrefix("refs/heads/")
-                ref.name.startsWith("refs/tags/") -> ref.name.removePrefix("refs/tags/")
-                ref.name.startsWith("refs/remotes/") -> ref.name.removePrefix("refs/remotes/")
-                else -> ref.name
+            when {
+                ref.name.startsWith("refs/heads/") -> {
+                    val shortName = ref.name.removePrefix("refs/heads/")
+                    if (shortName in allowedLocalBranches) {
+                        addRef(objId, "Branch $shortName")
+                    }
+                }
+                ref.name.startsWith("refs/tags/") -> {
+                    val shortName = ref.name.removePrefix("refs/tags/")
+                    addRef(objId, "Tag $shortName")
+                }
+                // Skip remotes to avoid clutter when limiting branches
+                else -> {
+                    // ignore other refs
+                }
             }
-            val label = when {
-                ref.name.startsWith("refs/heads/") -> "Branch $shortName"
-                ref.name.startsWith("refs/tags/") -> "Tag $shortName"
-                ref.name.startsWith("refs/remotes/") -> "Remote $shortName"
-                else -> shortName
-            }
-            addRef(objId, label)
         }
         return result
     }
