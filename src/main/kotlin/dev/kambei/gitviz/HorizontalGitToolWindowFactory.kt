@@ -262,47 +262,65 @@ private class GraphPanel(
         for ((i, c) in commits.withIndex()) idx[c.id.name()] = i
         indexById = idx
 
-        // Active lanes list: each index corresponds to a vertical lane and stores the commitId expected next on that lane
-        val active = mutableListOf<String>()
-        val lanes = IntArray(commits.size)
-        var maxLane = -1
-
+        // Stable branch-based lane assignment: commits belonging to the same branch stay on the same lane and color
+        // 1) Seed branch names from refs (labels starting with "Branch ") at tip commits
+        val branchNameByIndex = arrayOfNulls<String>(commits.size)
         for (i in commits.indices) {
-            val c = commits[i]
-            val id = c.id.name()
-
-            // Determine lane for this commit: if already visible in active lanes, reuse; otherwise append a new lane
-            var lane = active.indexOf(id)
-            if (lane == -1) {
-                active.add(id)
-                lane = active.lastIndex
-            }
-            lanes[i] = lane
-            if (lane > maxLane) maxLane = lane
-
-            // Update active lanes based on parents
-            val parents = c.parents ?: emptyArray()
-            if (parents.isEmpty()) {
-                // No parents: this line ends here
-                active.removeAt(lane)
-            } else {
-                // Continue first parent on the same lane
-                active[lane] = parents[0].id.name()
-
-                // Insert other parents into subsequent lanes to keep branches visually separate
-                var insertPos = lane + 1
-                for (k in 1 until parents.size) {
-                    val pid = parents[k].id.name()
-                    val existing = active.indexOf(pid)
-                    if (existing == -1) {
-                        active.add(insertPos, pid)
-                        insertPos++
-                    } // else already present; keep as-is to avoid lane churn
-                }
+            val id = commits[i].id.name()
+            val labels = refsByCommit[id] ?: emptyList()
+            val branchLabels = labels.filter { it.startsWith("Branch ") }
+            if (branchLabels.isNotEmpty()) {
+                val chosen = branchLabels.map { it.removePrefix("Branch ").trim() }.sorted().first()
+                if (branchNameByIndex[i] == null) branchNameByIndex[i] = chosen
             }
         }
+
+        fun firstParentIndexOf(idx: Int): Int? {
+            val parents = commits[idx].parents ?: emptyArray()
+            if (parents.isEmpty()) return null
+            return indexById[parents[0].id.name()]
+        }
+
+        // 2) Propagate branch names backwards along first-parent chains from each seeded tip
+        for (i in commits.indices.reversed()) {
+            val b = branchNameByIndex[i] ?: continue
+            var p = firstParentIndexOf(i)
+            while (p != null && branchNameByIndex[p] == null) {
+                branchNameByIndex[p] = b
+                p = firstParentIndexOf(p)
+            }
+        }
+
+        // 3) Build first-parent children map to allow inheriting branch from children where missing
+        val firstParentChildren = Array(commits.size) { mutableListOf<Int>() }
+        for (i in commits.indices) {
+            val p = firstParentIndexOf(i)
+            if (p != null) firstParentChildren[p].add(i)
+        }
+        for (i in commits.indices.reversed()) {
+            if (branchNameByIndex[i] == null) {
+                val fromChild = firstParentChildren[i].asSequence()
+                    .map { child -> branchNameByIndex[child] }
+                    .filterNotNull()
+                    .firstOrNull()
+                if (fromChild != null) branchNameByIndex[i] = fromChild
+            }
+        }
+
+        // 4) Fallback for any still-unassigned commits: put them into a common "root" bucket
+        for (i in commits.indices) {
+            if (branchNameByIndex[i] == null) branchNameByIndex[i] = "root"
+        }
+
+        // 5) Assign stable lane indices per branch based on first appearance order
+        val laneOfBranch = LinkedHashMap<String, Int>()
+        for (i in commits.indices) {
+            val b = branchNameByIndex[i]!!
+            if (!laneOfBranch.containsKey(b)) laneOfBranch[b] = laneOfBranch.size
+        }
+        val lanes = IntArray(commits.size) { idx -> laneOfBranch[branchNameByIndex[idx]!!] ?: 0 }
         laneByIndex = lanes
-        laneCount = maxLane + 1
+        laneCount = laneOfBranch.size
 
         // Special handling: visually separate the checked-out branch (HEAD) vertically
         // With oldest→newest ordering, the newest commit is at the last index
