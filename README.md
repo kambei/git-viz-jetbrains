@@ -13,6 +13,7 @@ It uses JGit under the hood to read repository data and renders a scrollable hor
 - Beautiful horizontal DAG graph of commits (nodes with smooth curved edges)
 - Shows branches, tags, and remotes as badges near nodes
 - Displays author and short message as labels
+- Limits button to choose how many latest commits and latest branches to show (defaults: 500 commits, 20 branches)
 - Scales to the full history of your repo (no artificial 200-commit limit)
 
 ## Requirements
