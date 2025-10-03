@@ -10,9 +10,9 @@ It uses JGit under the hood to read repository data and renders a scrollable hor
 
 ## Features
 
-- Horizontal, card-style visualization of commits
-- Shows branches, tags, and remotes as badges
-- Displays author and short message
+- Beautiful horizontal DAG graph of commits (nodes with smooth curved edges)
+- Shows branches, tags, and remotes as badges near nodes
+- Displays author and short message as labels
 - Scales to the full history of your repo (no artificial 200-commit limit)
 
 ## Requirements
@@ -49,7 +49,6 @@ The ZIP artifact will be created under `build/distributions/`. You can install i
 ## Notes & Limitations
 
 - The plugin reads the complete log via JGit. Very large repositories may take time to render on first load.
-- References are shown as simple badges; no graph lines are drawn between commits yet.
 
 ## Development
 
