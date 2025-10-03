@@ -1,0 +1,13 @@
+<idea-plugin>
+  <id>dev.kambei.gitviz</id>
+  <name>GitViz Horizontal</name>
+  <vendor email="" url="https://github.com/kambei/git-viz-jetbrains">kambei</vendor>
+  <description>Shows the Git history horizontally with author, commit message, SHA, tags, and branches.</description>
+
+  <depends>com.intellij.modules.platform</depends>
+  <depends>Git4Idea</depends>
+
+  <extensions defaultExtensionNs="com.intellij">
+    <toolWindow id="GitViz Horizontal" factoryClass="dev.kambei.gitviz.HorizontalGitToolWindowFactory" anchor="bottom" icon="AllIcons.Vcs.Log"/>
+  </extensions>
+</idea-plugin>
