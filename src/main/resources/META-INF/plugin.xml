@@ -8,6 +8,6 @@
   <depends>Git4Idea</depends>
 
   <extensions defaultExtensionNs="com.intellij">
-    <toolWindow id="GitViz Horizontal" factoryClass="dev.kambei.gitviz.HorizontalGitToolWindowFactory" anchor="bottom" icon="AllIcons.Vcs.Log"/>
+    <toolWindow id="GitViz Horizontal" factoryClass="dev.kambei.gitviz.HorizontalGitToolWindowFactory" anchor="bottom" icon="/gitviz.png"/>
   </extensions>
 </idea-plugin>
