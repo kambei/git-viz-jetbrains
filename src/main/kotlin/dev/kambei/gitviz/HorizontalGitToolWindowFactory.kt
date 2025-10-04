@@ -23,6 +23,18 @@ class HorizontalGitToolWindowFactory : ToolWindowFactory, DumbAware {
     // Defaults; users can change via the UI button
     private var maxCommitsToShow: Int = 500
     private var maxBranchesToShow: Int = 20
+
+    // Filters
+    private var filterBranch: String = ""
+    private var filterTag: String = ""
+    private var filterAuthor: String = ""
+    private var filterMessage: String = ""
+
+    // UI references to update models on repo load
+    private var branchCombo: JComboBox<String>? = null
+    private var tagCombo: JComboBox<String>? = null
+    private var authorCombo: JComboBox<String>? = null
+
     override fun createToolWindowContent(project: Project, toolWindow: ToolWindow) {
         val panel = JPanel(BorderLayout())
 
@@ -41,7 +53,50 @@ class HorizontalGitToolWindowFactory : ToolWindowFactory, DumbAware {
         rightPanel.add(zoomOutBtn)
         rightPanel.add(zoomInBtn)
         topBar.add(rightPanel, BorderLayout.EAST)
-        panel.add(topBar, BorderLayout.NORTH)
+
+        // Filter bar
+        val filterBar = JPanel(FlowLayout(FlowLayout.LEFT, 6, 2))
+        // Branch select
+        val branchBox = JComboBox<String>()
+        branchBox.prototypeDisplayValue = "refs/heads/long-branch-name"
+        branchBox.toolTipText = "Select a local branch (or empty for all)"
+        // Tag select
+        val tagBox = JComboBox<String>()
+        tagBox.prototypeDisplayValue = "v2025.10.04"
+        tagBox.toolTipText = "Select a tag (or empty for all)"
+        // Author select
+        val authorBox = JComboBox<String>()
+        authorBox.prototypeDisplayValue = "Firstname Lastname"
+        authorBox.toolTipText = "Select an author (or empty for all)"
+        // Commit message substring (free text)
+        val messageField = JTextField(18)
+        messageField.toolTipText = "Commit message substring (case-insensitive)"
+        messageField.text = filterMessage
+
+        // keep references
+        branchCombo = branchBox
+        tagCombo = tagBox
+        authorCombo = authorBox
+
+        // Initialize with current filters
+        val applyBtn = JButton("Apply")
+        val clearBtn = JButton("Clear")
+        filterBar.add(JLabel("Filter:"))
+        filterBar.add(JLabel("Branch:"))
+        filterBar.add(branchBox)
+        filterBar.add(JLabel("Tag:"))
+        filterBar.add(tagBox)
+        filterBar.add(JLabel("Author:"))
+        filterBar.add(authorBox)
+        filterBar.add(JLabel("Message:"))
+        filterBar.add(messageField)
+        filterBar.add(applyBtn)
+        filterBar.add(clearBtn)
+
+        val topStack = JPanel(BorderLayout())
+        topStack.add(topBar, BorderLayout.NORTH)
+        topStack.add(filterBar, BorderLayout.SOUTH)
+        panel.add(topStack, BorderLayout.NORTH)
 
         val commitsPanel = JPanel(BorderLayout())
         val scroll = JBScrollPane(commitsPanel)
@@ -57,6 +112,34 @@ class HorizontalGitToolWindowFactory : ToolWindowFactory, DumbAware {
         zoomOutBtn.addActionListener {
             graphProvider()?.zoomOut()
         }
+
+        // Wire filter buttons
+        applyBtn.addActionListener {
+            val bSel = (branchBox.selectedItem as? String)?.trim().orEmpty()
+            val tSel = (tagBox.selectedItem as? String)?.trim().orEmpty()
+            val aSel = (authorBox.selectedItem as? String)?.trim().orEmpty()
+            filterBranch = bSel
+            filterTag = tSel
+            filterAuthor = aSel
+            filterMessage = messageField.text.trim()
+            SwingUtilities.invokeLater {
+                loadGitData(project, commitsPanel, statusLabel)
+            }
+        }
+        clearBtn.addActionListener {
+            filterBranch = ""
+            filterTag = ""
+            filterAuthor = ""
+            filterMessage = ""
+            branchBox.selectedIndex = if (branchBox.itemCount > 0) 0 else -1
+            tagBox.selectedIndex = if (tagBox.itemCount > 0) 0 else -1
+            authorBox.selectedIndex = if (authorBox.itemCount > 0) 0 else -1
+            messageField.text = ""
+            SwingUtilities.invokeLater {
+                loadGitData(project, commitsPanel, statusLabel)
+            }
+        }
+
         // Limits button popup
         limitsBtn.addActionListener { e ->
             val form = JPanel(GridBagLayout())
@@ -131,7 +214,7 @@ class HorizontalGitToolWindowFactory : ToolWindowFactory, DumbAware {
                 revWalk.use {
                     // Choose latest N local branches by tip commit time
                     val headRefs = repository.refDatabase.getRefsByPrefix("refs/heads/")
-                    val sortedHeads = headRefs.mapNotNull { r ->
+                    val allSortedHeads = headRefs.mapNotNull { r ->
                         val oid = r.objectId ?: r.peeledObjectId
                         if (oid != null) {
                             try {
@@ -145,13 +228,87 @@ class HorizontalGitToolWindowFactory : ToolWindowFactory, DumbAware {
                         .map { p -> p.first }
                         .take(maxBranchesToShow)
 
+                    // Populate Branch combo (empty + branch names)
+                    runCatching {
+                        val names = mutableListOf("")
+                        names.addAll(allSortedHeads.map { r -> r.name.removePrefix("refs/heads/") })
+                        val model = DefaultComboBoxModel(names.toTypedArray())
+                        branchCombo?.model = model
+                        if (filterBranch.isNotEmpty()) branchCombo?.selectedItem = filterBranch else branchCombo?.selectedIndex = 0
+                    }
+
+                    // Collect tags and populate Tag combo
+                    val tagRefs = repository.refDatabase.getRefsByPrefix("refs/tags/")
+                    val tagNames = tagRefs.map { it.name.removePrefix("refs/tags/") }.sorted()
+                    runCatching {
+                        val names = mutableListOf("")
+                        names.addAll(tagNames)
+                        val model = DefaultComboBoxModel(names.toTypedArray())
+                        tagCombo?.model = model
+                        if (filterTag.isNotEmpty()) tagCombo?.selectedItem = filterTag else tagCombo?.selectedIndex = 0
+                    }
+
+                    // Prepare map commitId -> list of tag names (short)
+                    val tagsByCommit = mutableMapOf<String, MutableList<String>>()
+                    for (ref in tagRefs) {
+                        val peeled = repository.refDatabase.peel(ref)
+                        val objId = peeled.peeledObjectId ?: ref.objectId
+                        val key = objId?.name()
+                        if (key != null) {
+                            tagsByCommit.computeIfAbsent(key) { mutableListOf() }
+                                .add(ref.name.removePrefix("refs/tags/"))
+                        }
+                    }
+
+                    // Apply branch filter if provided
+                    val branchFilter = filterBranch.trim()
+                    val usingBranchFilter = branchFilter.isNotEmpty()
+                    val matchingHead: Ref? = if (usingBranchFilter) {
+                        headRefs.firstOrNull { r -> r.name.removePrefix("refs/heads/").equals(branchFilter, ignoreCase = true) }
+                    } else null
+                    val sortedHeads = if (matchingHead != null) listOf(matchingHead) else allSortedHeads
+
                     val startPoints = LinkedHashSet<ObjectId>()
                     for (r in sortedHeads) {
                         val oid = r.objectId ?: r.peeledObjectId
                         if (oid != null) startPoints.add(oid)
                     }
                     if (startPoints.isEmpty()) {
-                        repository.resolve("HEAD")?.let { sp -> startPoints.add(sp) }
+                        // try resolve specific branch ref if user typed exact full ref
+                        if (usingBranchFilter) {
+                            val refByName = repository.findRef("refs/heads/$branchFilter")
+                            val oid = refByName?.objectId ?: refByName?.peeledObjectId
+                            if (oid != null) startPoints.add(oid)
+                        }
+                        if (startPoints.isEmpty()) {
+                            repository.resolve("HEAD")?.let { sp -> startPoints.add(sp) }
+                        }
+                    }
+
+                    // Populate Author combo by walking a limited number of commits from start points
+                    runCatching {
+                        RevWalk(repository).use { aw ->
+                            aw.sort(org.eclipse.jgit.revwalk.RevSort.TOPO)
+                            aw.sort(org.eclipse.jgit.revwalk.RevSort.COMMIT_TIME_DESC)
+                            for (sp in startPoints) {
+                                val rc = aw.parseCommit(sp)
+                                aw.markStart(rc)
+                            }
+                            val authors = java.util.TreeSet<String>(String.CASE_INSENSITIVE_ORDER)
+                            var cc: RevCommit? = aw.next()
+                            var count = 0
+                            val maxScan = maxCommitsToShow.coerceAtLeast(1000)
+                            while (cc != null && count < maxScan) {
+                                cc.authorIdent?.name?.let { n -> if (n.isNotBlank()) authors.add(n) }
+                                count++
+                                cc = aw.next()
+                            }
+                            val names = mutableListOf("")
+                            names.addAll(authors)
+                            val model = DefaultComboBoxModel(names.toTypedArray())
+                            authorCombo?.model = model
+                            if (filterAuthor.isNotEmpty()) authorCombo?.selectedItem = filterAuthor else authorCombo?.selectedIndex = 0
+                        }
                     }
 
                     // Configure RevWalk with topo ordering and time desc
@@ -163,15 +320,41 @@ class HorizontalGitToolWindowFactory : ToolWindowFactory, DumbAware {
                         it.markStart(rc)
                     }
                     val log = mutableListOf<RevCommit>()
+                    val authorFilter = filterAuthor.trim()
+                    val msgFilter = filterMessage.trim().lowercase()
+                    val tagFilter = filterTag.trim()
                     var c: RevCommit? = it.next()
                     while (c != null && log.size < maxCommitsToShow) {
-                        log.add(c)
+                        var include = true
+                        if (authorFilter.isNotEmpty()) {
+                            val a = c.authorIdent?.name ?: ""
+                            include = include && a.equals(authorFilter, ignoreCase = true)
+                        }
+                        if (tagFilter.isNotEmpty()) {
+                            val tlist = tagsByCommit[c.id.name()] ?: emptyList()
+                            include = include && tlist.any { tn -> tn.equals(tagFilter, ignoreCase = true) }
+                        }
+                        if (msgFilter.isNotEmpty()) {
+                            val m = c.fullMessage?.lowercase() ?: c.shortMessage?.lowercase() ?: ""
+                            include = include && m.contains(msgFilter)
+                        }
+                        if (include) log.add(c)
                         c = it.next()
                     }
 
-                    val allowedBranchNames = sortedHeads.map { r -> r.name.removePrefix("refs/heads/") }.toSet()
+                    val allowedBranchNames: Set<String> = if (usingBranchFilter && matchingHead != null) {
+                        setOf(matchingHead.name.removePrefix("refs/heads/"))
+                    } else {
+                        allSortedHeads.map { r -> r.name.removePrefix("refs/heads/") }.toSet()
+                    }
                     val refsByCommit = collectRefs(repository, allowedBranchNames)
-                    statusLabel.text = "Showing ${log.size} commits • ${allowedBranchNames.size} branches"
+                    val filterNote = buildString {
+                        if (usingBranchFilter) append(" • branch=\"$branchFilter\"")
+                        if (filterTag.trim().isNotEmpty()) append(" • tag=\"${filterTag.trim()}\"")
+                        if (authorFilter.isNotEmpty()) append(" • author=\"$authorFilter\"")
+                        if (msgFilter.isNotEmpty()) append(" • message~=\"$msgFilter\"")
+                    }
+                    statusLabel.text = "Showing ${log.size} commits • ${allowedBranchNames.size} branches$filterNote"
                     val graph = GraphPanel(log.asReversed(), refsByCommit)
 
                     commitsPanel.removeAll()
