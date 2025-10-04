@@ -4,6 +4,28 @@
   <vendor email="" url="https://github.com/kambei/git-viz-jetbrains">kambei</vendor>
   <description>Shows the Git history horizontally with author, commit message, SHA, tags, and branches.</description>
 
+  <change-notes><![CDATA[
+    <h3>Version 1.2.0</h3>
+    <ul>
+      <li><b>Advanced Filtering:</b> New filter bar with branch, tag, author, and commit message search capabilities</li>
+      <li><b>Auto-Population:</b> Filter dropdowns automatically populate based on repository data</li>
+      <li><b>Apply & Clear:</b> Easily apply filter criteria or reset all filters with dedicated buttons</li>
+      <li><b>Performance:</b> Filters applied dynamically during commit collection for better responsiveness</li>
+    </ul>
+    <h3>Version 1.1.0</h3>
+    <ul>
+      <li>Configurable limits for commits (default: 500) and branches (default: 20) displayed</li>
+      <li>Stable lane assignment using branch-based propagation</li>
+      <li>Improved visual clarity with consistent branch coloring</li>
+    </ul>
+    <h3>Version 1.0.0</h3>
+    <ul>
+      <li>Initial release with horizontal Git history visualization</li>
+      <li>Multi-branch support including tags and remote branches</li>
+      <li>Beautiful DAG graph with smooth curved edges</li>
+    </ul>
+  ]]></change-notes>
+
   <depends>com.intellij.modules.platform</depends>
   <depends>Git4Idea</depends>
 
