@@ -47,3 +47,4 @@ bin/
 
 # IntelliJ Platform local artifacts
 .intellijPlatform/localPlatformArtifacts
+.intellijPlatform/
