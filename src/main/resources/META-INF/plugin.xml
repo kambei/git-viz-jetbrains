@@ -4,6 +4,9 @@
   <vendor email="" url="https://github.com/kambei/git-viz-jetbrains">kambei</vendor>
   <description>Shows the Git history horizontally with author, commit message, SHA, tags, and branches.</description>
 
+  <!-- Declare IDE build compatibility for Marketplace visibility -->
+  <idea-version since-build="242.0"/>
+
   <change-notes><![CDATA[
     <h3>Version 1.2.0</h3>
     <ul>

@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- This icon is used by JetBrains Marketplace and the IDE Plugins UI -->
+<!-- Copied from src/main/resources/gitviz.svg to satisfy Marketplace requirements -->
+<svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 40 40">
+  <rect width="40" height="40" rx="8" fill="#0B1F2A"/>
+  <g fill="none" stroke="#32C5FF" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M6 26 C12 22, 16 18, 22 14"/>
+    <path d="M22 14 C26 12, 30 10, 34 8"/>
+    <circle cx="6" cy="26" r="3" fill="#32C5FF"/>
+    <circle cx="22" cy="14" r="3" fill="#32C5FF"/>
+    <circle cx="34" cy="8" r="3" fill="#32C5FF"/>
+  </g>
+  <g fill="#FFFFFF" font-family="Segoe UI, Roboto, Helvetica, Arial, sans-serif" font-size="7" font-weight="700">
+    <text x="8" y="36">GITVIZ</text>
+  </g>
+</svg>

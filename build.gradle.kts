@@ -4,7 +4,7 @@ plugins {
 }
 
 group = "dev.kambei"
-version = "1.2.0"
+version = "1.3.0"
 
 repositories {
     mavenCentral()
@@ -31,6 +31,13 @@ intellijPlatform {
             url.set("https://github.com/kambei/git-viz-jetbrains")
         }
         description = "Shows the Git history horizontally with author, commit message, SHA, tags, and branches."
+    }
+
+    // Optional: configure publishing to JetBrains Marketplace
+    publishing {
+        token.set(System.getenv("MARKETPLACE_TOKEN"))
+        // Use the default channel unless overridden (e.g., 'eap')
+        channels.set(listOf("default"))
     }
 }
 

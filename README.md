@@ -41,6 +41,23 @@ This launches a sandbox IDE instance with the plugin installed.
 The ZIP artifact will be created under `build/distributions/`. You can install it into your IDE via:
 - Settings/Preferences > Plugins > Gear icon > Install Plugin from Disk…
 
+### Publish to JetBrains Marketplace
+
+1. Create a JetBrains Marketplace account and a plugin listing with ID `dev.kambei.gitviz`.
+2. Set an environment variable with your Marketplace token:
+   - On macOS/Linux: `export MARKETPLACE_TOKEN=your-token`
+   - On Windows (PowerShell): `$Env:MARKETPLACE_TOKEN = "your-token"`
+3. Publish using Gradle:
+
+```bash
+./gradlew publishPlugin
+```
+
+Notes:
+- The plugin icon is provided at `src/main/resources/META-INF/pluginIcon.svg`.
+- Compatibility is declared via `<idea-version since-build="242.0"/>` in `plugin.xml` (IDE 2024.2+).
+- You can change the release channel in `build.gradle.kts` under `intellijPlatform.publishing.channels`.
+
 ## Using the plugin
 
 - Open a project that contains a Git repository.
