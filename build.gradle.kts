@@ -1,10 +1,10 @@
 plugins {
     kotlin("jvm") version "2.2.20"
-    id("org.jetbrains.intellij.platform") version "2.1.0"
+    id("org.jetbrains.intellij.platform") version "2.9.0"
 }
 
 group = "dev.kambei"
-version = "1.4.2"
+version = "1.4.5"
 
 repositories {
     mavenCentral()
@@ -12,10 +12,9 @@ repositories {
 }
 
 dependencies {
-    intellijPlatform { 
-        intellijIdeaCommunity("2024.2")
+    intellijPlatform {
+        create("IU", "2025.2.3")
         bundledPlugins("Git4Idea")
-        instrumentationTools()
     }
     implementation("org.eclipse.jgit:org.eclipse.jgit:6.9.0.202403050737-r")
     testImplementation(kotlin("test"))
@@ -31,13 +30,6 @@ intellijPlatform {
             url.set("https://github.com/kambei/git-viz-jetbrains")
         }
         description = "Shows the Git history horizontally with author, commit message, SHA, tags, and branches."
-    }
-
-    // Optional: configure publishing to JetBrains Marketplace
-    publishing {
-        token.set(System.getenv("MARKETPLACE_TOKEN"))
-        // Use the default channel unless overridden (e.g., 'eap')
-        channels.set(listOf("default"))
     }
 }
 
