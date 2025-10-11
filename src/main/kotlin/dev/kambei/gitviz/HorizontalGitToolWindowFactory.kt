@@ -465,8 +465,8 @@ class HorizontalGitToolWindowFactory : ToolWindowFactory, DumbAware {
         }
         p.layout = FlowLayout(FlowLayout.CENTER, 0, 0)
         p.background = bg
-        p.add(l)
         p.border = BorderFactory.createLineBorder(bg.darker())
+        p.add(l)
         return p
     }
 
@@ -499,6 +499,8 @@ private class GraphPanel(
     private var scale = 1.0f
     private val minScale = 0.5f
     private val maxScale = 3.0f
+    private var panStartPoint: Point? = null
+    private var panStartViewPoint: Point? = null
 
     init {
         val idx = HashMap<String, Int>(commits.size)
@@ -598,9 +600,37 @@ private class GraphPanel(
         }
 
         val self = this
-        addMouseListener(object : java.awt.event.MouseAdapter() {
-            override fun mouseClicked(e: java.awt.event.MouseEvent) {
-                if (SwingUtilities.isLeftMouseButton(e) && e.clickCount >= 1) {
+        val ml = object : java.awt.event.MouseAdapter() {
+            private var pressPoint: Point? = null
+
+            override fun mousePressed(e: java.awt.event.MouseEvent) {
+                if (SwingUtilities.isLeftMouseButton(e)) {
+                    pressPoint = e.point
+                    val viewport = SwingUtilities.getAncestorOfClass(JViewport::class.java, self) as? JViewport
+                    if (viewport != null) {
+                        panStartPoint = e.point
+                        panStartViewPoint = viewport.viewPosition
+                        cursor = Cursor.getPredefinedCursor(Cursor.MOVE_CURSOR)
+                    }
+                }
+            }
+
+            override fun mouseReleased(e: java.awt.event.MouseEvent) {
+                if (SwingUtilities.isLeftMouseButton(e)) {
+                    cursor = Cursor.getDefaultCursor()
+                    val p = pressPoint
+                    if (p != null && p.distance(e.point) < 5) {
+                        // It's a click, not a drag
+                        handleMouseClick(e)
+                    }
+                    pressPoint = null
+                    panStartPoint = null
+                    panStartViewPoint = null
+                }
+            }
+
+            private fun handleMouseClick(e: java.awt.event.MouseEvent) {
+                if (e.clickCount >= 1) {
                     // Priority: author label -> message label -> node
                     val authorIdx = findAuthorAt(e.point)
                     if (authorIdx != null) {
@@ -631,6 +661,27 @@ private class GraphPanel(
                     if (idx != null) {
                         val c = commits[idx]
                         showFullMessagePopup(c, e.point)
+                    }
+                }
+            }
+        }
+        addMouseListener(ml)
+
+        addMouseMotionListener(object : java.awt.event.MouseMotionAdapter() {
+            override fun mouseDragged(e: java.awt.event.MouseEvent) {
+                if (SwingUtilities.isLeftMouseButton(e)) {
+                    val start = panStartPoint
+                    val viewStart = panStartViewPoint
+                    if (start != null && viewStart != null) {
+                        val viewport = SwingUtilities.getAncestorOfClass(JViewport::class.java, self) as? JViewport
+                        if (viewport != null) {
+                            val dx = e.x - start.x
+                            val dy = e.y - start.y
+                            val newX = (viewStart.x - dx).coerceAtLeast(0)
+                            val newY = (viewStart.y - dy).coerceAtLeast(0)
+                            viewport.viewPosition = Point(newX, newY)
+                            e.consume()
+                        }
                     }
                 }
             }
