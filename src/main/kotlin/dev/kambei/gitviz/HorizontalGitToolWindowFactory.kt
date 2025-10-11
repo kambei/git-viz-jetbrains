@@ -574,29 +574,27 @@ private class GraphPanel(
 
         toolTipText = "" // enable dynamic tooltips
 
-        // Mouse wheel zoom (Ctrl+wheel) and drag-to-pan
+        // Mouse wheel zoom and drag-to-pan
         addMouseWheelListener { e ->
-            if (e.isControlDown) {
-                val oldScale = scale
-                val factor = if (e.wheelRotation < 0) 1.1f else 0.9f
-                val newScale = (scale * factor).coerceIn(minScale, maxScale)
-                if (newScale != scale) {
-                    val viewport = SwingUtilities.getAncestorOfClass(JViewport::class.java, this) as? JViewport
-                    val viewPos = viewport?.viewPosition ?: Point(0, 0)
-                    val mouse = e.point
-                    // Anchor in logical coords before scaling
-                    val anchorX = (viewPos.x + mouse.x) / oldScale
-                    val anchorY = (viewPos.y + mouse.y) / oldScale
-                    scale = newScale
-                    revalidate()
-                    // Keep anchor under the mouse after scaling
-                    val newViewX = (anchorX * newScale - mouse.x).toInt().coerceAtLeast(0)
-                    val newViewY = (anchorY * newScale - mouse.y).toInt().coerceAtLeast(0)
-                    viewport?.viewPosition = Point(newViewX, newViewY)
-                    repaint()
-                }
-                e.consume()
+            val oldScale = scale
+            val factor = if (e.wheelRotation < 0) 1.1f else 0.9f
+            val newScale = (scale * factor).coerceIn(minScale, maxScale)
+            if (newScale != scale) {
+                val viewport = SwingUtilities.getAncestorOfClass(JViewport::class.java, this) as? JViewport
+                val viewPos = viewport?.viewPosition ?: Point(0, 0)
+                val mouse = e.point
+                // Anchor in logical coords before scaling
+                val anchorX = (viewPos.x + mouse.x) / oldScale
+                val anchorY = (viewPos.y + mouse.y) / oldScale
+                scale = newScale
+                revalidate()
+                // Keep anchor under the mouse after scaling
+                val newViewX = (anchorX * newScale - mouse.x).toInt().coerceAtLeast(0)
+                val newViewY = (anchorY * newScale - mouse.y).toInt().coerceAtLeast(0)
+                viewport?.viewPosition = Point(newViewX, newViewY)
+                repaint()
             }
+            e.consume()
         }
 
         val self = this
