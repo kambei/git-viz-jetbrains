@@ -1,5 +1,6 @@
 package dev.kambei.gitviz
 
+import com.intellij.icons.AllIcons
 import com.intellij.openapi.project.DumbAware
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.ui.popup.JBPopupFactory
@@ -9,11 +10,16 @@ import com.intellij.ui.JBColor
 import com.intellij.ui.awt.RelativePoint
 import com.intellij.ui.components.JBScrollPane
 import com.intellij.ui.content.ContentFactory
+import org.eclipse.jgit.diff.DiffEntry
+import org.eclipse.jgit.diff.DiffFormatter
 import org.eclipse.jgit.lib.ObjectId
 import org.eclipse.jgit.lib.Ref
+import org.eclipse.jgit.lib.Repository
 import org.eclipse.jgit.lib.RepositoryBuilder
 import org.eclipse.jgit.revwalk.RevCommit
 import org.eclipse.jgit.revwalk.RevWalk
+import org.eclipse.jgit.treewalk.CanonicalTreeParser
+import org.eclipse.jgit.util.io.DisabledOutputStream
 import java.awt.*
 import javax.swing.*
 import kotlin.math.max
@@ -354,7 +360,7 @@ class HorizontalGitToolWindowFactory : ToolWindowFactory, DumbAware {
                         if (msgFilter.isNotEmpty()) append(" • message~=\"$msgFilter\"")
                     }
                     statusLabel.text = "Showing ${log.size} commits • ${allowedBranchNames.size} branches$filterNote"
-                    val graph = GraphPanel(log.asReversed(), refsByCommit)
+                    val graph = GraphPanel(repository, log.asReversed(), refsByCommit)
 
                     commitsPanel.removeAll()
                     // Wrap graph in a centering holder so it stays centered when content is smaller than the viewport
@@ -474,6 +480,7 @@ class HorizontalGitToolWindowFactory : ToolWindowFactory, DumbAware {
 }
 
 private class GraphPanel(
+    private val repository: Repository,
     commitsNewestFirst: List<RevCommit>,
     private val refsByCommit: Map<String, List<String>>
 ) : JComponent() {
@@ -706,19 +713,65 @@ private class GraphPanel(
     }
 
     private fun showFullMessagePopup(c: RevCommit, atPoint: Point) {
+        val mainPanel = JPanel(BorderLayout(0, 8))
+
         val textArea = JTextArea(c.fullMessage ?: c.shortMessage ?: "")
         textArea.isEditable = false
         textArea.wrapStyleWord = true
         textArea.lineWrap = true
-        textArea.border = BorderFactory.createEmptyBorder(8, 8, 8, 8)
+        textArea.border = BorderFactory.createEmptyBorder(4, 4, 4, 4)
         val scroll = JBScrollPane(textArea)
         scroll.preferredSize = Dimension(420, 240)
+        mainPanel.add(scroll, BorderLayout.CENTER)
+
+        // File changes visualization
+        try {
+            if (c.parentCount > 0) {
+                val parent = repository.parseCommit(c.getParent(0).id)
+                val reader = repository.newObjectReader()
+                val oldTree = CanonicalTreeParser(null, reader, parent.tree)
+                val newTree = CanonicalTreeParser(null, reader, c.tree)
+
+                val diff = DiffFormatter(DisabledOutputStream.INSTANCE).apply {
+                    setRepository(repository)
+                    setContext(0)
+                }.scan(oldTree, newTree)
+
+                if (diff.isNotEmpty()) {
+                    val filesPanel = JPanel()
+                    filesPanel.layout = BoxLayout(filesPanel, BoxLayout.Y_AXIS)
+                    filesPanel.border = BorderFactory.createTitledBorder("Files Changed")
+
+                    for (entry in diff.sortedBy { it.newPath }) {
+                        val (icon, path, color) = when (entry.changeType) {
+                            DiffEntry.ChangeType.ADD -> Triple(AllIcons.General.Add, entry.newPath, JBColor(Color(0x34A853), Color(0x66BB6A)))
+                            DiffEntry.ChangeType.MODIFY -> Triple(AllIcons.Actions.Edit, entry.newPath, JBColor(Color(0xFBBC05), Color(0xFFD54F)))
+                            DiffEntry.ChangeType.DELETE -> Triple(AllIcons.General.Remove, entry.oldPath, JBColor(Color(0xE91E63), Color(0xF48FB1)))
+                            DiffEntry.ChangeType.RENAME -> Triple(AllIcons.Actions.RefactoringBulb, "${entry.oldPath} → ${entry.newPath}", JBColor.GRAY)
+                            else -> Triple(AllIcons.FileTypes.Any_type, entry.newPath, JBColor.GRAY)
+                        }
+                        val fileLabel = JLabel(path, icon, SwingConstants.LEFT)
+                        fileLabel.foreground = color
+                        val line = JPanel(FlowLayout(FlowLayout.LEFT, 4, 1))
+                        line.isOpaque = false
+                        line.add(fileLabel)
+                        filesPanel.add(line)
+                    }
+                    val filesScrollPane = JBScrollPane(filesPanel)
+                    filesScrollPane.preferredSize = Dimension(420, 120)
+                    mainPanel.add(filesScrollPane, BorderLayout.SOUTH)
+                }
+            }
+        } catch (e: Exception) {
+            // Ignore exceptions for now, e.g. for the first commit that has no parent
+        }
+
         val authorName = c.authorIdent?.name ?: ""
-        val title = "${c.name.substring(0,7)} · $authorName"
+        val title = "${c.name.substring(0, 7)} · $authorName"
         val popup = JBPopupFactory.getInstance()
-            .createComponentPopupBuilder(scroll, null)
+            .createComponentPopupBuilder(mainPanel, mainPanel)
             .setTitle(title)
-            .setMovable(false)
+            .setMovable(true)
             .setResizable(true)
             .setRequestFocus(true)
             .createPopup()
