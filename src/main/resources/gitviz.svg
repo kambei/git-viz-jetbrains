@@ -4,8 +4,12 @@
   <!-- Horizontal git-like graph: three nodes connected with a smooth line -->
   <defs>
     <style type="text/css"><![CDATA[
-      .stroke { stroke: currentColor; }
-      .fill { fill: currentColor; }
+      .stroke { stroke: #6E6E6E; }
+      .fill { fill: #6E6E6E; }
+      @media (prefers-color-scheme: dark) {
+        .stroke { stroke: #AFB1B3; }
+        .fill { fill: #AFB1B3; }
+      }
     ]]></style>
   </defs>
   <!-- Connection line -->

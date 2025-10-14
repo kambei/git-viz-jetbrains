@@ -1,10 +1,10 @@
 plugins {
     kotlin("jvm") version "2.2.20"
-    id("org.jetbrains.intellij.platform") version "2.9.0"
+    id("org.jetbrains.intellij.platform") version "2.10.0"
 }
 
 group = "dev.kambei"
-version = "1.7.0"
+version = "1.7.1"
 
 repositories {
     mavenCentral()
