@@ -59,3 +59,11 @@ Key files:
 ## License
 
 This project is licensed under the terms of the MIT License. See the [LICENSE](LICENSE) file for details.
+
+<br>
+
+## Support Me
+
+If you find this application helpful, consider supporting me on Ko-fi!
+
+[![Support me on Ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/kambei)
